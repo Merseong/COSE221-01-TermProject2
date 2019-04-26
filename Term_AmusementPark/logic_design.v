@@ -1,23 +1,47 @@
-module logic_design(SW, CLOCK_50, HEX0, HEX1, HEX3);
+module logic_design(SW, CLOCK_50, HEX0, HEX1, HEX3, LEDG);
 	input [4:0] SW; // 4: Reset, 3: -8(drive), 2: +12, 1: +8, 0: +4
 	input CLOCK_50;
 	output reg [0:6] HEX0, HEX1; // count of waiting people
 	output reg [0:6] HEX3; // count of how many amuse can be driven
+	output reg [7:0] LEDG;
 	
-	wire [1:0] convIn;
+	wire newclock;
+	wire noInput;
+	reg stayIn;
+	wire [1:0] in; // converted Input
 	reg [2:0] cS; // current State
-	wire [2:0] nS; // next State
+	reg [2:0] nextState; // next State
 	
 	// constant values
 	parameter Seg9 = 7'b000_1100; parameter Seg8 = 7'b000_0000; parameter Seg7 = 7'b000_1111; parameter Seg6 = 7'b010_0000; parameter Seg5 = 7'b010_0100;
 	parameter Seg4 = 7'b100_1100; parameter Seg3 = 7'b000_0110; parameter Seg2 = 7'b001_0010; parameter Seg1 = 7'b100_1111; parameter Seg0 = 7'b000_0001;
 	parameter SegErr = 7'b111_1111;
 	
-	convert4to2(SW[3:0], convIn[1:0]);
+	convert4to2(SW[3:0], in[1:0], noInput);
+	newClk(CLOCK_50, newclock);
 	
-	//assign nextState[2];
-	//assign nextState[1];
-	//assign nextState[0];
+	// next state
+	
+	initial 
+	begin
+		cS = 3'b000;
+		stayIn = 1'b0;
+	end
+	
+	always@(*)
+	begin
+		LEDG[7:5] = cS;
+		LEDG[2:0] = nextState;
+		LEDG[4] = noInput;
+		LEDG[3] = stayIn;
+	end
+	
+	always@(*)
+	begin
+		nextState[2] <= cS[2]&~in[1] | cS[2]&~in[0] | cS[1]&~in[1]&in[0] | cS[1]&cS[0]&~in[1] | ~cS[1]&cS[0]&in[1]&~in[0] | cS[1]&~cS[0]&in[1]&~in[0];
+		nextState[1] <= cS[2]&in[1]&in[0] | ~cS[2]&~cS[1]&~in[1]&in[0] | ~cS[2]&~cS[1]&cS[0]&~in[1] | cS[1]&~cS[0]&~in[1]&~in[0] | cS[1]&cS[0]&in[1]&~in[0] | ~cS[2]&~cS[1]&~cS[0]&in[1]&~in[0];
+		nextState[0] <= cS[0]&in[0] | cS[2]&cS[0] | ~cS[2]&~cS[0]&~in[0] | ~cS[0]&~in[1]&~in[0] | cS[1]&in[1]&~in[0];
+	end
 
 	always@(*)
 	begin
@@ -32,78 +56,48 @@ module logic_design(SW, CLOCK_50, HEX0, HEX1, HEX3);
 		endcase;
 	end
 	
-	always@(posedge CLOCK_50)
+	always@(posedge newclock)
 	begin
-		cS <= nS;
+		if (SW[4]) begin // reset
+			cS <= 3'b000;
+		end
+		else if (!noInput & !stayIn) begin
+			cS <= nextState;
+			stayIn <= 1'b1;
+		end
+		else if (stayIn & noInput) stayIn <= 1'b0;
 	end
 
 endmodule
 
-module pulGen(in, clk, rst, out);
+// slow clock
+module newClk(in, out);
+	input in;
 	output reg out;
-	input clk, in, rst;
-	reg [1:0] currstate0;
-	reg [1:0] nextstate0;
-	integer cnt;
-	integer ncnt;
-	parameter out_S0 = 2'b00; parameter out_S1 = 2'b01; parameter out_S2 = 2'b10;
-
-	always @(posedge clk)//State Change
+	reg [23:0] nclk;
+	
+	always@(posedge in)
 	begin
-	if(rst)
-		begin
-		currstate0<=out_S0;cnt<=0;
-		end
-	else
-		begin
-		currstate0 <= nextstate0; cnt <= ncnt; 
-		end
+		nclk <= nclk + 1;
+		out <= nclk[23];
 	end
 	
-	always @(*)
-	begin
-	case(currstate0)
-		out_S0 : begin
-			if(in) begin nextstate0 = out_S1; ncnt = 0; end
-			else   begin nextstate0 = out_S0; ncnt = 0; end
-		end
-		out_S1 : begin 
-			if(in) begin
-				nextstate0 = out_S1;
-				ncnt = cnt + 1;
-			end
-			else begin
-				nextstate0 = out_S0; 
-				if(cnt >= 1000)
-					nextstate0 = out_S2;
-				end
-			end
-	out_S2 : begin nextstate0 = out_S0; ncnt = 0; end
-		default : nextstate0 = out_S0;
-	endcase
-	end
-
-	always @(*)
-	begin
-		if (currstate0 == out_S2) out = 1'b1;
-		else                                 out = 1'b0;
-	end
-		
-endmodule 
+endmodule
 
 // convert 4 bit input to 2 bit
-module convert4to2(in, out); 
+module convert4to2(in, out, err); 
 	input [3:0] in;
 	output reg [1:0] out;
+	output reg err;
 	
 	always@(*)
 	begin
-		casez(in)
-			4'b1???: out = 2'b11;
-			4'b01??: out = 2'b10;
-			4'b001?: out = 2'b01;
-			4'b0001: out = 2'b00;
-			default: out = 2'bzz;
+		case(in)
+			4'b1000: begin err = 1'b0; out = 2'b11; end
+			4'b0100: begin err = 1'b0; out = 2'b10; end
+			4'b0010: begin err = 1'b0; out = 2'b01; end
+			4'b0001: begin err = 1'b0; out = 2'b00; end
+			default: begin err = 1'b1; out = 2'b00; end
 		endcase
 	end
 endmodule
