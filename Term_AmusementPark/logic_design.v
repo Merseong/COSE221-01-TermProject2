@@ -3,11 +3,10 @@ module logic_design(SW, CLOCK_50, HEX0, HEX1, HEX3, LEDG);
 	input CLOCK_50;
 	output reg [0:6] HEX0, HEX1; // count of waiting people
 	output reg [0:6] HEX3; // count of how many amuse can be driven
-	output reg [7:0] LEDG;
 	
-	wire newclock;
-	wire noInput;
-	reg stayIn;
+	wire newclock; // slowed clock
+	wire noInput; // if there are no input, this is 1
+	reg stayIn; // check if there have same input with before
 	wire [1:0] in; // converted Input
 	reg [2:0] cS; // current State
 	reg [2:0] nextState; // next State
@@ -20,24 +19,14 @@ module logic_design(SW, CLOCK_50, HEX0, HEX1, HEX3, LEDG);
 	convert4to2(SW[3:0], in[1:0], noInput);
 	newClk(CLOCK_50, newclock);
 	
-	// next state
-	
 	initial 
 	begin
-		cS = 3'b000;
+		cS = 3'b000; // inital state
 		stayIn = 1'b0;
 	end
 	
 	always@(*)
-	begin
-		LEDG[7:5] = cS;
-		LEDG[2:0] = nextState;
-		LEDG[4] = noInput;
-		LEDG[3] = stayIn;
-	end
-	
-	always@(*)
-	begin
+	begin // nextState made with current State and input
 		nextState[2] <= cS[2]&~in[1] | cS[2]&~in[0] | cS[1]&~in[1]&in[0] | cS[1]&cS[0]&~in[1] | ~cS[1]&cS[0]&in[1]&~in[0] | cS[1]&~cS[0]&in[1]&~in[0];
 		nextState[1] <= cS[2]&in[1]&in[0] | ~cS[2]&~cS[1]&~in[1]&in[0] | ~cS[2]&~cS[1]&cS[0]&~in[1] | cS[1]&~cS[0]&~in[1]&~in[0] | cS[1]&cS[0]&in[1]&~in[0] | ~cS[2]&~cS[1]&~cS[0]&in[1]&~in[0];
 		nextState[0] <= cS[0]&in[0] | cS[2]&cS[0] | ~cS[2]&~cS[0]&~in[0] | ~cS[0]&~in[1]&~in[0] | cS[1]&in[1]&~in[0];
@@ -65,7 +54,7 @@ module logic_design(SW, CLOCK_50, HEX0, HEX1, HEX3, LEDG);
 			cS <= nextState;
 			stayIn <= 1'b1;
 		end
-		else if (stayIn & noInput) stayIn <= 1'b0;
+		else if (stayIn & noInput) stayIn <= 1'b0; // switch downed
 	end
 
 endmodule
@@ -97,7 +86,7 @@ module convert4to2(in, out, err);
 			4'b0100: begin err = 1'b0; out = 2'b10; end
 			4'b0010: begin err = 1'b0; out = 2'b01; end
 			4'b0001: begin err = 1'b0; out = 2'b00; end
-			default: begin err = 1'b1; out = 2'b00; end
+			default: begin err = 1'b1; out = 2'b00; end // input was 0000 or other
 		endcase
 	end
 endmodule
