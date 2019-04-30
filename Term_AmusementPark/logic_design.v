@@ -1,4 +1,4 @@
-module logic_design(SW, CLOCK_50, HEX0, HEX1, HEX3, LEDG);
+module logic_design(SW, CLOCK_50, HEX0, HEX1, HEX3);
 	input [4:0] SW; // 4: Reset, 3: -8(drive), 2: +12, 1: +8, 0: +4
 	input CLOCK_50;
 	output reg [0:6] HEX0, HEX1; // count of waiting people
